@@ -1,0 +1,50 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import javax.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
+
+@RestController
+public class S3ConcatenateFilesController {
+
+    @GetMapping(value = "/concatenate-s3-files", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<InputStream> concatenateS3Files(
+            @RequestParam(name = "bucket") String bucketName,
+            @RequestParam(name = "keyPrefix") String keyPrefix,
+            HttpServletResponse response) throws AmazonClientException, IOException {
+        
+        AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
+        ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
+                .withBucketName(bucketName)
+                .withPrefix(keyPrefix);
+        ListObjectsV2Result listObjectsResult = s3.listObjectsV2(listObjectsRequest);
+        List<S3Object> s3Objects = listObjectsResult.getObjectSummaries();
+
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + keyPrefix.replace('/', '_') + ".bin\"");
+        
+        return new ResponseEntity<InputStream>(concatenateS3Objects(s3, s3Objects), HttpStatus.OK);
+    }
+
+    private InputStream concatenateS3Objects(AmazonS3 s3, List<S3Object> s3Objects) throws IOException {
+        InputStream[] inputStreams = new InputStream[s3Objects.size()];
+        for (int i = 0; i < s3Objects.size(); i++) {
+            S3Object s3Object = s3Objects.get(i);
+            S3ObjectInputStream s3ObjectInputStream = s3Object.getObjectContent();
+            inputStreams[i] = s3ObjectInputStream;
+        }
+        return new SequenceInputStream(Collections.enumeration(Arrays.asList(inputStreams)));
+    }
+}
