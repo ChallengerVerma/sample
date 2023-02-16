@@ -1,0 +1,87 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import javax.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
+
+@RestController
+public class S3ConcatenateFilesController {
+
+    @GetMapping(value = "/concatenate-s3-files", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<InputStream> concatenateS3Files(
+            @RequestParam(name = "bucket") String bucketName,
+            @RequestParam(name = "keyPrefix") String keyPrefix,
+            HttpServletResponse response) throws AmazonClientException, IOException {
+        
+        AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
+        ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
+                .withBucketName(bucketName)
+                .withPrefix(keyPrefix);
+        ListObjectsV2Result listObjectsResult = s3.listObjectsV2(listObjectsRequest);
+        List<S3Object> s3Objects = listObjectsResult.getObjectSummaries();
+
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + keyPrefix.replace('/', '_') + ".bin\"");
+        
+        try {
+            return new ResponseEntity<InputStream>(concatenateS3Objects(s3, s3Objects), HttpStatus.OK);
+        } catch (AmazonServiceException e) {
+            // Log the AmazonServiceException and return an error response
+            return new ResponseEntity<InputStream>(HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (AmazonClientException e) {
+            // Log the AmazonClientException and return an error response
+            return new ResponseEntity<InputStream>(HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (InterruptedException e) {
+            // Log the InterruptedException and return an error response
+            return new ResponseEntity<InputStream>(HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (ExecutionException e) {
+            // Log the ExecutionException and return an error response
+            return new ResponseEntity<InputStream>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private InputStream concatenateS3Objects(AmazonS3 s3, List<S3Object> s3Objects) throws InterruptedException, ExecutionException, IOException {
+        ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        List<Future<InputStream>> futures = new ArrayList<>();
+        
+        for (S3Object s3Object : s3Objects) {
+            futures.add(executorService.submit(() -> {
+                S3ObjectInputStream s3ObjectInputStream = s3Object.getObjectContent();
+                return s3ObjectInputStream;
+            }));
+        }
+        
+        List<InputStream> inputStreams = new ArrayList<>();
+        for (Future<InputStream> future : futures) {
+            InputStream inputStream = future.get();
+            if (inputStream != null) {
+                inputStreams.add(inputStream);
+            }
+        }
+        
+        executorService.shutdown();
+        
+        if (inputStreams.isEmpty()) {
+            return null;
+        }
+        
+        InputStream concatenatedStream = new SequenceInputStream
