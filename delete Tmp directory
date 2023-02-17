@@ -1,0 +1,36 @@
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public class DeleteTempDirectoryExample {
+    public static void main(String[] args) {
+        // specify the path to the temporary directory you want to delete
+        String tempDirectoryPath = "C:\\temp";
+
+        // create a new Path object with the path to the temporary directory
+        Path tempDirectory = Paths.get(tempDirectoryPath);
+
+        // check if the temporary directory exists before deleting it
+        if (Files.exists(tempDirectory)) {
+            // use the delete() method to delete the temporary directory and its contents
+            try {
+                Files.walk(tempDirectory)
+                     .sorted((p1, p2) -> -p1.compareTo(p2))
+                     .forEach(p -> {
+                        try {
+                            Files.delete(p);
+                        } catch (IOException e) {
+                            System.err.println(e);
+                        }
+                     });
+                System.out.println("Temporary directory and its contents deleted successfully.");
+            } catch (IOException e) {
+                System.err.println("Failed to delete temporary directory and its contents.");
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println("Temporary directory does not exist.");
+        }
+    }
+}
