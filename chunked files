@@ -1,0 +1,66 @@
+@GetMapping("/download")
+public void downloadFiles(HttpServletResponse response) throws IOException {
+    AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+
+    ListObjectsV2Request req = new ListObjectsV2Request().withBucketName(BUCKET_NAME);
+    ListObjectsV2Result result;
+    String nextToken = null;
+    int chunkSize = 100; // Download 100 files at a time
+    List<S3ObjectSummary> objectSummaries = new ArrayList<>();
+
+    // Retrieve all object summaries from the S3 bucket
+    do {
+        req.setContinuationToken(nextToken);
+        result = s3Client.listObjectsV2(req);
+        objectSummaries.addAll(result.getObjectSummaries());
+        nextToken = result.getNextContinuationToken();
+    } while (nextToken != null);
+
+    // Set response headers
+    response.setContentType("application/zip");
+    response.setHeader("Content-Disposition", "attachment; filename=files.zip");
+
+    // Create the output stream for the zip file
+    ZipOutputStream zipOutputStream = new ZipOutputStream(response.getOutputStream());
+
+    // Download the files in chunks
+    for (int i = 0; i < objectSummaries.size(); i += chunkSize) {
+        int endIndex = Math.min(i + chunkSize, objectSummaries.size());
+        List<S3ObjectSummary> objectSummariesChunk = objectSummaries.subList(i, endIndex);
+
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        // Download each file in the chunk asynchronously
+        for (S3ObjectSummary objectSummary : objectSummariesChunk) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    S3Object s3object = s3Client.getObject(new GetObjectRequest(BUCKET_NAME, objectSummary.getKey()));
+                    InputStream inputStream = s3object.getObjectContent();
+                    ZipEntry zipEntry = new ZipEntry(objectSummary.getKey());
+                    zipOutputStream.putNextEntry(zipEntry);
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        zipOutputStream.write(buffer, 0, bytesRead);
+                    }
+                    zipOutputStream.closeEntry();
+                    inputStream.close();
+                } catch (IOException e) {
+                    // Handle exception
+                }
+            });
+            futures.add(future);
+        }
+
+        // Wait for all files in the chunk to be downloaded before proceeding to the next chunk
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+        try {
+            allFutures.get();
+        } catch (InterruptedException | ExecutionException e) {
+            // Handle exception
+        }
+    }
+
+    // Close the zip output stream
+    zipOutputStream.close();
+}
