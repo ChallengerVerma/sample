@@ -1,0 +1,59 @@
+@RestController
+public class S3ConcatenateController {
+
+    @Autowired
+    private S3Client s3Client;
+
+    @GetMapping("/concatenate")
+    public ResponseEntity<byte[]> concatenateS3Files(@RequestParam List<String> keys) {
+        CompletableFuture<byte[]> future = s3Client.concatenateS3Files(keys);
+        byte[] data;
+        try {
+            data = future.get(10, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            throw new RuntimeException("Failed to concatenate S3 files", e);
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDispositionFormData("attachment", "concatenated-file.txt");
+        headers.setContentLength(data.length);
+        return new ResponseEntity<>(data, headers, HttpStatus.OK);
+    }
+}
+
+public CompletableFuture<byte[]> concatenateS3Files(List<String> keys) {
+    return CompletableFuture.supplyAsync(() -> {
+        try {
+            // Create a list of S3ObjectSummary objects from the S3 keys
+            ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
+                    .withBucketName(bucketName)
+                    .withPrefix(prefix);
+            List<S3ObjectSummary> objectSummaries = s3Client.listObjectsV2(listObjectsRequest)
+                    .getObjectSummaries()
+                    .stream()
+                    .filter(summary -> keys.contains(summary.getKey()))
+                    .collect(Collectors.toList());
+
+            // Sort the object summaries by their key (file name)
+            objectSummaries.sort(Comparator.comparing(S3ObjectSummary::getKey));
+
+            // Concatenate the S3 files into a single byte array
+            ByteBuffer[] buffers = new ByteBuffer[objectSummaries.size()];
+            for (int i = 0; i < objectSummaries.size(); i++) {
+                S3Object s3Object = s3Client.getObject(bucketName, objectSummaries.get(i).getKey());
+                S3ObjectInputStream s3InputStream = s3Object.getObjectContent();
+                ReadableByteChannel channel = Channels.newChannel(s3InputStream);
+                buffers[i] = ByteBuffer.allocate((int) s3Object.getObjectMetadata().getContentLength());
+                while (channel.read(buffers[i]) > 0);
+                channel.close();
+                s3InputStream.close();
+            }
+            return ByteBuffer.wrap(buffers)
+                    .order(ByteOrder.nativeOrder())
+                    .asReadOnlyBuffer()
+                    .array();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to concatenate S3 files", e);
+        }
+    });
+}
