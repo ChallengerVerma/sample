@@ -1,0 +1,73 @@
+@GetMapping(value = "/concatenate-s3-files", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+public ResponseEntity<byte[]> concatenateS3Files(
+        @RequestParam(name = "bucket") String bucketName,
+        @RequestParam(name = "keyPrefix") String keyPrefix,
+        HttpServletResponse response) {
+
+    AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
+    ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
+            .withBucketName(bucketName)
+            .withPrefix(keyPrefix);
+    ListObjectsV2Result listObjectsResult = s3.listObjectsV2(listObjectsRequest);
+    List<S3Object> s3Objects = listObjectsResult.getObjectSummaries();
+
+    response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"" + keyPrefix.replace('/', '_') + ".bin\"");
+
+    try {
+        return new ResponseEntity<>(concatenateS3Objects(s3, s3Objects), HttpStatus.OK);
+    } catch (AmazonServiceException | AmazonClientException | InterruptedException | ExecutionException e) {
+        // Log the exception and return an error response
+        e.printStackTrace();
+        return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+}
+
+private byte[] concatenateS3Objects(AmazonS3 s3, List<S3Object> s3Objects)
+        throws InterruptedException, ExecutionException, IOException {
+
+    ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    List<Future<InputStream>> futures = new ArrayList<>();
+
+    for (S3Object s3Object : s3Objects) {
+        futures.add(executorService.submit(() -> {
+            try (InputStream inputStream = new BufferedInputStream(s3Object.getObjectContent(), BUFFER_SIZE)) {
+                return inputStream;
+            } catch (IOException e) {
+                // Log the exception and return null to skip this input stream
+                e.printStackTrace();
+                return null;
+            }
+        }));
+    }
+
+    executorService.shutdown();
+
+    List<InputStream> inputStreams = new ArrayList<>();
+
+    for (Future<InputStream> future : futures) {
+        try {
+            InputStream inputStream = future.get();
+            if (inputStream != null) {
+                inputStreams.add(new CloseShieldInputStream(inputStream));
+            }
+        } catch (ExecutionException e) {
+            // Log the exception and continue processing other input streams
+            e.printStackTrace();
+        }
+    }
+
+    Enumeration<InputStream> enumeration = Collections.enumeration(inputStreams);
+    SequenceInputStream sequenceInputStream = new SequenceInputStream(enumeration);
+
+    byte[] buffer = new byte[BUFFER_SIZE];
+    int bytesRead;
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    try (InputStream is = new BufferedInputStream(sequenceInputStream, BUFFER_SIZE)) {
+        while ((bytesRead = is.read(buffer)) != -1) {
+            byteArrayOutputStream.write(buffer, 0, bytesRead);
+        }
+    }
+
+    return byteArrayOutputStream.toByteArray();
+}
