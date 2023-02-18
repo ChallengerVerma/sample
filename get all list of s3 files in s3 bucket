@@ -1,0 +1,36 @@
+import java.util.List;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.ListObjectsV2Request;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+
+public class S3ListKeysExample {
+    public static void main(String[] args) {
+        // specify the name of the S3 bucket you want to list object keys for
+        String bucketName = "my-s3-bucket";
+
+        // create an AmazonS3 client object
+        AmazonS3 s3Client = AmazonS3ClientBuilder.defaultClient();
+
+        // create a ListObjectsV2Request object and set the bucket name
+        ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
+            .withBucketName(bucketName);
+
+        // use the listObjectsV2() method to retrieve the list of objects in the bucket
+        ListObjectsV2Result listObjectsResult;
+        do {
+            listObjectsResult = s3Client.listObjectsV2(listObjectsRequest);
+
+            // process the list of objects
+            List<S3ObjectSummary> objects = listObjectsResult.getObjectSummaries();
+            for (S3ObjectSummary objectSummary : objects) {
+                System.out.println(objectSummary.getKey());
+            }
+
+            // set the continuation token to retrieve the next page of results
+            String token = listObjectsResult.getNextContinuationToken();
+            listObjectsRequest.setContinuationToken(token);
+        } while (listObjectsResult.isTruncated());
+    }
+}
