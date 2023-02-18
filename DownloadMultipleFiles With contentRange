@@ -1,0 +1,58 @@
+@GetMapping(value = "/download-s3-file-multiple-files", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+public void downloadS3FileMultipleFiles(@RequestParam String s3Key,
+                                        @RequestParam int bufferSize,
+                                        HttpServletResponse response) throws IOException {
+    // Set content type and disposition
+    response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+    response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + s3Key + "\"");
+
+    // Get S3 object metadata
+    ObjectMetadata metadata = s3Client.getObjectMetadata(bucketName, s3Key);
+    long contentLength = metadata.getContentLength();
+
+    // Set content length header
+    response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
+
+    // Calculate number of parts based on buffer size and content length
+    int numParts = (int) Math.ceil((double) contentLength / bufferSize);
+
+    // Set multipart boundary
+    String boundary = "multipart-boundary-" + UUID.randomUUID().toString();
+    response.setHeader(HttpHeaders.CONTENT_TYPE, "multipart/byteranges; boundary=" + boundary);
+
+    // Get S3 object input stream
+    S3Object s3Object = s3Client.getObject(bucketName, s3Key);
+    S3ObjectInputStream s3InputStream = s3Object.getObjectContent();
+
+    try {
+        // Set the response status and headers for each part
+        for (int i = 0; i < numParts; i++) {
+            // Calculate start and end bytes for each part
+            long startByte = i * bufferSize;
+            long endByte = Math.min((i + 1) * bufferSize - 1, contentLength - 1);
+
+            // Set content range header
+            String contentRange = String.format("bytes %d-%d/%d", startByte, endByte, contentLength);
+            response.setHeader(HttpHeaders.CONTENT_RANGE, contentRange);
+
+            // Set the response status
+            response.setStatus(HttpStatus.PARTIAL_CONTENT.value());
+
+            // Write the current part to the response output stream
+            byte[] buffer = new byte[bufferSize];
+            int bytesRead;
+            while (startByte <= endByte && (bytesRead = s3InputStream.read(buffer)) != -1) {
+                response.getOutputStream().write(buffer, 0, bytesRead);
+                startByte += bytesRead;
+            }
+
+            // Add multipart boundary to end of part
+            response.getOutputStream().write(("\r\n--" + boundary + "\r\n").getBytes());
+        }
+
+        // Add multipart boundary to end of response
+        response.getOutputStream().write(("--" + boundary + "--").getBytes());
+    } finally {
+        s3InputStream.close();
+    }
+}
