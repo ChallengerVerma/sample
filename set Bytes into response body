@@ -1,0 +1,16 @@
+@GetMapping("/large-response")
+public void getLargeResponse(HttpServletResponse response) throws IOException {
+    response.setContentType("text/plain");
+    response.setCharacterEncoding("UTF-8");
+    response.setHeader("Content-Disposition", "attachment; filename=\"large-response.txt\"");
+
+    StreamingResponseBody responseBody = out -> {
+        // Write the large string to the response output stream
+        out.write("large string".getBytes());
+    };
+
+    // Set the response status and body using StreamingResponseBody
+    response.setStatus(HttpServletResponse.SC_OK);
+    response.flushBuffer();
+    responseBody.writeTo(response.getOutputStream());
+}
