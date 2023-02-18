@@ -1,0 +1,80 @@
+@GetMapping("/download")
+public void downloadLargeFile(HttpServletResponse response) throws IOException {
+    // Set the S3 object key and bucket name
+    String bucketName = "my-bucket";
+    String key = "my-large-file";
+
+    // Get the S3Object from the AmazonS3 client
+    AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+    S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketName, key));
+
+    // Set the response content type and headers
+    response.setContentType(s3Object.getObjectMetadata().getContentType());
+    response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + key);
+
+    // Get the S3ObjectInputStream and the total file size
+    S3ObjectInputStream s3ObjectInputStream = s3Object.getObjectContent();
+    long fileSize = s3Object.getObjectMetadata().getContentLength();
+
+    // Set the buffer size and the number of bytes to read at a time
+    int bufferSize = 8192;
+    int readSize = 1024 * 1024; // Read 1MB at a time
+
+    // Set the initial range start and end positions
+    long rangeStart = 0;
+    long rangeEnd = readSize - 1;
+
+    // Loop through the S3ObjectInputStream and write the data to the response output stream
+    while (rangeStart < fileSize) {
+        // Set the range header for the current range start and end positions
+        String contentRange = String.format("bytes %d-%d/%d", rangeStart, rangeEnd, fileSize);
+        response.setHeader(HttpHeaders.CONTENT_RANGE, contentRange);
+
+        // Set the response status code to 206 (Partial Content)
+        response.setStatus(HttpStatus.PARTIAL_CONTENT.value());
+
+        // Create a byte array to read data into
+        byte[] buffer = new byte[bufferSize];
+
+        // Create a ByteBuffer to read data into
+        ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+
+        // Create a ByteArrayOutputStream to write data to
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(bufferSize);
+
+        // Loop through the S3ObjectInputStream and read data into the ByteBuffer
+        while (byteBuffer.position() < readSize) {
+            int bytesRead = s3ObjectInputStream.read(buffer, byteBuffer.position(), readSize - byteBuffer.position());
+
+            if (bytesRead == -1) {
+                break;
+            }
+
+            byteBuffer.position(byteBuffer.position() + bytesRead);
+        }
+
+        // Flip the ByteBuffer to prepare it for writing
+        byteBuffer.flip();
+
+        // Write the ByteBuffer to the ByteArrayOutputStream
+        byteArrayOutputStream.write(byteBuffer.array(), 0, byteBuffer.limit());
+
+        // Get the bytes from the ByteArrayOutputStream and write them to the response output stream
+        byte[] bytes = byteArrayOutputStream.toByteArray();
+        response.getOutputStream().write(bytes);
+
+        // Flush the response output stream
+        response.getOutputStream().flush();
+
+        // Increment the range start and end positions
+        rangeStart = rangeEnd + 1;
+        rangeEnd += readSize;
+
+        if (rangeEnd > fileSize - 1) {
+            rangeEnd = fileSize - 1;
+        }
+    }
+
+    // Close the S3ObjectInputStream
+    s3ObjectInputStream.close();
+}
