@@ -1,0 +1,35 @@
+@GetMapping("/download/{bucket}/{key}")
+public void downloadFileInParts(@PathVariable String bucket, @PathVariable String key, HttpServletResponse response) throws IOException {
+    S3Object s3Object = s3client.getObject(new GetObjectRequest(bucket, key));
+    long contentLength = s3Object.getObjectMetadata().getContentLength();
+    long partSize = 1024 * 1024 * 1024; // 1 GB
+    int totalParts = (int) Math.ceil((double) contentLength / partSize);
+
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment; filename=\"" + key + "\"");
+
+    byte[] buffer = new byte[1024 * 1024]; // 1 MB
+
+    for (int i = 0; i < totalParts; i++) {
+        long start = i * partSize;
+        long end = (i == totalParts - 1) ? contentLength - 1 : (i + 1) * partSize - 1;
+
+        GetObjectRequest rangeObjectRequest = new GetObjectRequest(bucket, key)
+                .withRange(start, end);
+        S3Object rangeObject = s3client.getObject(rangeObjectRequest);
+        InputStream inputStream = rangeObject.getObjectContent();
+
+        response.setHeader("Content-Length", String.valueOf(end - start + 1));
+        response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + contentLength);
+        response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+
+        OutputStream outputStream = response.getOutputStream();
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, bytesRead);
+        }
+
+        outputStream.flush();
+        inputStream.close();
+    }
+}
