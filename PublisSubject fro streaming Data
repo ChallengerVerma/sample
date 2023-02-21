@@ -1,0 +1,53 @@
+@GetMapping("/download/{bucket}/{key}")
+public void downloadFileInParts(@PathVariable String bucket, @PathVariable String key, HttpServletResponse response) throws IOException {
+    S3Object s3Object = s3client.getObject(new GetObjectRequest(bucket, key));
+    long contentLength = s3Object.getObjectMetadata().getContentLength();
+    long partSize = 1024 * 1024 * 1024; // 1 GB
+    int totalParts = (int) Math.ceil((double) contentLength / partSize);
+
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment; filename=\"" + key + "\"");
+
+    response.setHeader("Accept-Ranges", "bytes");
+
+    List<PublishSubject<byte[]>> partSubjects = new ArrayList<>(totalParts);
+    for (int i = 0; i < totalParts; i++) {
+        partSubjects.add(PublishSubject.create());
+    }
+
+    response.setHeader("Content-Length", String.valueOf(contentLength));
+
+    Observable.fromIterable(partSubjects)
+            .flatMap((Function<PublishSubject<byte[]>, ObservableSource<byte[]>>) subject ->
+                    subject.observeOn(Schedulers.io()))
+            .subscribe(response::getOutputStream::write, Throwable::printStackTrace, () -> {
+                response.getOutputStream().flush();
+                response.getOutputStream().close();
+            });
+
+    byte[] buffer = new byte[1024 * 1024]; // 1 MB
+    for (int i = 0; i < totalParts; i++) {
+        long start = i * partSize;
+        long end = (i == totalParts - 1) ? contentLength - 1 : (i + 1) * partSize - 1;
+
+        GetObjectRequest rangeObjectRequest = new GetObjectRequest(bucket, key)
+                .withRange(start, end);
+        S3Object rangeObject = s3client.getObject(rangeObjectRequest);
+        InputStream inputStream = rangeObject.getObjectContent();
+
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            byteArrayOutputStream.write(buffer, 0, bytesRead);
+        }
+
+        byteArrayOutputStream.flush();
+        byteArrayOutputStream.close();
+        inputStream.close();
+
+        byte[] partBytes = byteArrayOutputStream.toByteArray();
+        partSubjects.get(i).onNext(partBytes);
+        partSubjects.get(i).onComplete();
+    }
+}
