@@ -51,3 +51,24 @@ public void downloadFileInParts(@PathVariable String bucket, @PathVariable Strin
         partSubjects.get(i).onComplete();
     }
 }
+
+
+Observable.fromIterable(partSubjects)
+        .flatMap((Function<PublishSubject<byte[]>, ObservableSource<byte[]>>) subject ->
+                subject.observeOn(Schedulers.io()))
+        .subscribe(
+                bytes -> {
+                    try {
+                        response.getOutputStream().write(bytes);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                },
+                Throwable::printStackTrace,
+                () -> {
+                    try {
+                        response.getOutputStream().flush();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
