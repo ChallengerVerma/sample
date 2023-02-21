@@ -1,0 +1,19 @@
+Observer<byte[]> observer = new Observer<byte[]>() {
+    @Override
+    public void onNext(byte[] bytes) {
+        // Custom onNext implementation
+        // This method is called when a new byte[] is emitted by the Observable
+    }
+
+    @Override
+    public void onComplete() {
+        // Custom onComplete implementation
+        // This method is called when the Observable has finished emitting all items
+    }
+
+    @Override
+    public void onError(Throwable throwable) {
+        // Custom onError implementation
+        // This method is called when the Observable encounters an error
+    }
+};
