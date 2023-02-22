@@ -1,0 +1,101 @@
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
+import java.util.concurrent.SubmissionPublisher;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+
+public class S3FileDownloader {
+
+    private static final String BUCKET_NAME = "your-bucket-name";
+    private static final String OBJECT_KEY = "your-object-key";
+    private static final Region REGION = Region.US_EAST_1;
+    private static final long PART_SIZE = 100 * 1024 * 1024; // 100 MB
+
+    public static void main(String[] args) throws IOException {
+
+        S3Client s3Client = S3Client.builder()
+                .region(REGION)
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
+
+        long fileSize = s3Client.headObject(
+                builder -> builder.bucket(BUCKET_NAME).key(OBJECT_KEY)
+        ).contentLength();
+
+        long parts = fileSize / PART_SIZE;
+        if (fileSize % PART_SIZE != 0) {
+            parts++;
+        }
+
+        SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>();
+
+        BufferedOutputStream outputStream = new BufferedOutputStream(new FileOutputStream(new File("downloaded-file.txt")));
+
+        Subscriber<byte[]> subscriber = new Subscriber<>() {
+
+            private Subscription subscription;
+
+            @Override
+            public void onSubscribe(Subscription subscription) {
+                this.subscription = subscription;
+                subscription.request(1);
+            }
+
+            @Override
+            public void onNext(byte[] partBytes) {
+                try {
+                    outputStream.write(partBytes);
+                    subscription.request(1);
+                } catch (IOException e) {
+                    onError(e);
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                throwable.printStackTrace();
+            }
+
+            @Override
+            public void onComplete() {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        publisher.subscribe(subscriber);
+
+        for (int i = 0; i < parts; i++) {
+            long startByte = i * PART_SIZE;
+            long endByte = Math.min(startByte + PART_SIZE - 1, fileSize - 1);
+
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(OBJECT_KEY)
+                    .range("bytes=" + startByte + "-" + endByte)
+                    .build();
+
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes());
+
+            byte[] partBytes = objectBytes.asByteArray();
+            publisher.submit(partBytes);
+        }
+
+        publisher.close();
+    }
+}
