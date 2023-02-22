@@ -1,0 +1,89 @@
+public static void downloadS3FileToHttpResponse(HttpServletResponse response) throws IOException {
+    S3Client s3Client = S3Client.builder()
+            .region(REGION)
+            .credentialsProvider(DefaultCredentialsProvider.create())
+            .build();
+
+    // Get the size of the S3 object we want to download
+    long fileSize = s3Client.headObject(builder -> builder.bucket(BUCKET_NAME).key(OBJECT_KEY)).contentLength();
+
+    // Set the response headers
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment; filename=\"" + OBJECT_KEY + "\"");
+    response.setHeader("Content-Length", String.valueOf(fileSize));
+
+    // Prepare for multipart download
+    long parts = fileSize / PART_SIZE;
+    if (fileSize % PART_SIZE != 0) {
+        parts++;
+    }
+
+    SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>();
+
+    Subscriber<byte[]> subscriber = new Subscriber<>() {
+
+        private Subscription subscription;
+
+        @Override
+        public void onSubscribe(Subscription subscription) {
+            this.subscription = subscription;
+            subscription.request(1);
+        }
+
+        @Override
+        public void onNext(byte[] partBytes) {
+            try {
+                response.getOutputStream().write(partBytes);
+                subscription.request(1);
+            } catch (IOException e) {
+                onError(e);
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            throwable.printStackTrace();
+        }
+
+        @Override
+        public void onComplete() {
+            try {
+                response.getOutputStream().flush();
+                response.getOutputStream().close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    };
+
+    publisher.subscribe(subscriber);
+
+    for (int i = 0; i < parts; i++) {
+        long startByte = i * PART_SIZE;
+        long endByte = Math.min(startByte + PART_SIZE - 1, fileSize - 1);
+
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(BUCKET_NAME)
+                .key(OBJECT_KEY)
+                .range("bytes=" + startByte + "-" + endByte)
+                .build();
+
+        ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes());
+
+        byte[] partBytes = objectBytes.asByteArray();
+        publisher.submit(partBytes);
+    }
+
+    publisher.close();
+}
+
+
+@GET
+@Path("/download")
+public void downloadFile(@Context HttpServletResponse response) {
+    try {
+        downloadS3FileToHttpResponse(response);
+    } catch (IOException e) {
+        throw new WebApplicationException("Error while downloading file", e);
+    }
+}
