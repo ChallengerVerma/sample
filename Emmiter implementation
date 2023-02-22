@@ -1,0 +1,137 @@
+@GetMapping("/download")
+public void downloadFiles(HttpServletResponse response) {
+    // Create an S3 client
+    AmazonS3 s3Client = AmazonS3ClientBuilder.defaultClient();
+
+    // Set the S3 bucket and key prefix for the files to download
+    String bucketName = "my-bucket";
+    String keyPrefix = "files/";
+
+    // List the objects in the S3 bucket with the specified prefix
+    List<S3ObjectSummary> objectSummaries = s3Client.listObjects(bucketName, keyPrefix)
+            .getObjectSummaries();
+
+    // Create a list of observables, each of which will download one file from S3
+    List<Observable<byte[]>> fileObservables = objectSummaries.stream()
+            .map(summary -> {
+                String objectKey = summary.getKey();
+                S3Object s3Object = s3Client.getObject(bucketName, objectKey);
+                S3ObjectInputStream objectInputStream = s3Object.getObjectContent();
+
+                // Create a new publish subject for this file
+                PublishSubject<byte[]> partSubject = PublishSubject.create();
+
+                // Subscribe to the observable, and emit the bytes to the subject
+                Observable.create((ObservableOnSubscribe<byte[]>) emitter -> {
+                    byte[] buffer = new byte[1024 * 1024];
+                    int bytesRead;
+                    while ((bytesRead = objectInputStream.read(buffer)) != -1) {
+                        byte[] bytes = Arrays.copyOf(buffer, bytesRead);
+                        emitter.onNext(bytes);
+                    }
+                    emitter.onComplete();
+                })
+                .subscribeOn(Schedulers.io())
+                .subscribe(partSubject::onNext, partSubject::onError, partSubject::onComplete);
+
+                return partSubject;
+            })
+            .collect(Collectors.toList());
+
+    // Concatenate the file observables into a single observable
+    Observable<byte[]> concatenatedObservable = Observable.concat(fileObservables);
+
+    // Set the response headers
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment;filename=files.zip");
+
+    // Subscribe to the concatenated observable, and write the bytes to the response output stream
+    concatenatedObservable
+            .observeOn(Schedulers.io())
+            .subscribe(
+                    bytes -> {
+                        try {
+                            response.getOutputStream().write(bytes);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    },
+                    Throwable::printStackTrace,
+                    () -> {
+                        try {
+                            response.getOutputStream().flush();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+            );
+} 
+
+@GetMapping("/download")
+public void downloadFiles(HttpServletResponse response) {
+    // Create an S3 client
+    AmazonS3 s3Client = AmazonS3ClientBuilder.defaultClient();
+
+    // Set the S3 bucket and key prefix for the files to download
+    String bucketName = "my-bucket";
+    String keyPrefix = "files/";
+
+    // List the objects in the S3 bucket with the specified prefix
+    List<S3ObjectSummary> objectSummaries = s3Client.listObjects(bucketName, keyPrefix)
+            .getObjectSummaries();
+
+    // Create a list of observables, each of which will download one file from S3
+    List<Observable<byte[]>> fileObservables = objectSummaries.stream()
+            .map(summary -> {
+                String objectKey = summary.getKey();
+                S3Object s3Object = s3Client.getObject(bucketName, objectKey);
+                S3ObjectInputStream objectInputStream = s3Object.getObjectContent();
+
+                // Create a new publish subject for this file
+                PublishSubject<byte[]> partSubject = PublishSubject.create();
+
+                // Subscribe to the observable, and emit the bytes to the subject
+                Observable.create((ObservableOnSubscribe<byte[]>) emitter -> {
+                    byte[] buffer = new byte[1024 * 1024];
+                    int bytesRead;
+                    while ((bytesRead = objectInputStream.read(buffer)) != -1) {
+                        byte[] bytes = Arrays.copyOf(buffer, bytesRead);
+                        emitter.onNext(bytes);
+                    }
+                    emitter.onComplete();
+                })
+                .subscribeOn(Schedulers.io())
+                .subscribe(partSubject::onNext, partSubject::onError, partSubject::onComplete);
+
+                return partSubject;
+            })
+            .collect(Collectors.toList());
+
+    // Concatenate the file observables into a single observable
+    Observable<byte[]> concatenatedObservable = Observable.concat(fileObservables);
+
+    // Set the response headers
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment;filename=files.zip");
+
+    // Subscribe to the concatenated observable, and write the bytes to the response output stream
+    concatenatedObservable
+            .observeOn(Schedulers.io())
+            .subscribe(
+                    bytes -> {
+                        try {
+                            response.getOutputStream().write(bytes);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    },
+                    Throwable::printStackTrace,
+                    () -> {
+                        try {
+                            response.getOutputStream().flush();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+            );
+}
