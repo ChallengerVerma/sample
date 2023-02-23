@@ -1,0 +1,58 @@
+@GetMapping("/download")
+public void downloadFile(HttpServletResponse response) throws IOException {
+    String s3BucketName = "your-s3-bucket-name";
+    String s3KeyName = "your-s3-file-name";
+
+    AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+
+    // Get the object size to determine the number of parts needed for the download
+    S3Object object = s3Client.getObject(new GetObjectRequest(s3BucketName, s3KeyName));
+    long objectSize = object.getObjectMetadata().getContentLength();
+    object.close();
+
+    long partSize = 1024 * 1024 * 1024; // 1 GB
+    int numParts = (int) (objectSize / partSize) + 1;
+
+    // Create PublishSubjects for each part
+    List<PublishSubject<byte[]>> partSubjects = new ArrayList<>();
+    for (int i = 0; i < numParts; i++) {
+        partSubjects.add(PublishSubject.create());
+    }
+
+    // Create observables for each part, reading from S3 and writing to PublishSubjects
+    Observable.range(0, numParts)
+            .flatMap(index -> {
+                long rangeStart = index * partSize;
+                long rangeEnd = Math.min(rangeStart + partSize, objectSize) - 1;
+                return Observable.just(index)
+                        .observeOn(Schedulers.io())
+                        .map(partIndex -> {
+                            GetObjectRequest request = new GetObjectRequest(s3BucketName, s3KeyName);
+                            request.setRange(rangeStart, rangeEnd);
+
+                            S3Object objectPart = s3Client.getObject(request);
+                            InputStream inputStream = objectPart.getObjectContent();
+
+                            byte[] data = new byte[(int) objectPart.getObjectMetadata().getContentLength()];
+                            inputStream.read(data);
+                            inputStream.close();
+
+                            return data;
+                        })
+                        .subscribeOn(Schedulers.io())
+                        .subscribeWith(partSubjects.get(index));
+            })
+            .subscribe();
+
+    // Write each part to the response output stream
+    response.setContentType("application/octet-stream");
+    response.setHeader("Content-Disposition", "attachment; filename=" + s3KeyName);
+
+    Observable.fromIterable(partSubjects)
+            .flatMap((Function<PublishSubject<byte[]>, ObservableSource<byte[]>>) subject ->
+                    subject.observeOn(Schedulers.io()))
+            .subscribe(response.getOutputStream()::write, Throwable::printStackTrace, () -> {
+                response.getOutputStream().flush();
+                response.getOutputStream().close();
+            });
+} 
