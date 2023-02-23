@@ -1,0 +1,81 @@
+int parts = (int) Math.ceil((double) fileSize / PART_SIZE);
+
+// Create a thread pool with the number of threads equal to the number of parts
+ExecutorService executor = Executors.newFixedThreadPool(parts);
+
+// Create a CountDownLatch to wait for all threads to complete
+CountDownLatch latch = new CountDownLatch(parts);
+
+for (int i = 0; i < parts; i++) {
+    long startByte = i * PART_SIZE;
+    long endByte = Math.min(startByte + PART_SIZE - 1, fileSize - 1);
+
+    executor.submit(() -> {
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(OBJECT_KEY)
+                    .range("bytes=" + startByte + "-" + endByte)
+                    .build();
+
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes());
+
+            byte[] partBytes = objectBytes.asByteArray();
+
+            // Write the part to the response output stream
+            synchronized (response) {
+                response.getOutputStream().write(partBytes);
+            }
+
+            latch.countDown();
+        } catch (IOException e) {
+            // Handle the exception here
+            e.printStackTrace();
+        }
+    });
+}
+
+// Wait for all threads to complete
+latch.await();
+
+executor.shutdown();int parts = (int) Math.ceil((double) fileSize / PART_SIZE);
+
+// Create a thread pool with the number of threads equal to the number of parts
+ExecutorService executor = Executors.newFixedThreadPool(parts);
+
+// Create a CountDownLatch to wait for all threads to complete
+CountDownLatch latch = new CountDownLatch(parts);
+
+for (int i = 0; i < parts; i++) {
+    long startByte = i * PART_SIZE;
+    long endByte = Math.min(startByte + PART_SIZE - 1, fileSize - 1);
+
+    executor.submit(() -> {
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(OBJECT_KEY)
+                    .range("bytes=" + startByte + "-" + endByte)
+                    .build();
+
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes());
+
+            byte[] partBytes = objectBytes.asByteArray();
+
+            // Write the part to the response output stream
+            synchronized (response) {
+                response.getOutputStream().write(partBytes);
+            }
+
+            latch.countDown();
+        } catch (IOException e) {
+            // Handle the exception here
+            e.printStackTrace();
+        }
+    });
+}
+
+// Wait for all threads to complete
+latch.await();
+
+executor.shutdown();
