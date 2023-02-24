@@ -1,0 +1,20 @@
+ExecutorService executorService = Executors.newFixedThreadPool(10);
+List<Callable<String>> tasks = new ArrayList<>();
+// add tasks to the list
+
+// invoke all tasks and get a list of Future objects
+List<Future<String>> futures = executorService.invokeAll(tasks);
+
+// shutdown the executor service and wait for all tasks to complete
+executorService.shutdown();
+executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
+// check if all tasks completed successfully
+boolean allCompletedSuccessfully = futures.stream().allMatch(future -> {
+    try {
+        future.get();
+        return true;
+    } catch (Exception e) {
+        return false;
+    }
+});
