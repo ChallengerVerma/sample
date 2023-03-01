@@ -1,0 +1,94 @@
+@Path("/download")
+@Produces(MediaType.APPLICATION_OCTET_STREAM)
+public class DownloadResource {
+
+    private final int BUFFER_SIZE = 1024 * 1024; // 1 MB
+    
+    @GET
+    public void downloadFile(@QueryParam("fileId") String fileId, @Context HttpServletResponse response) {
+        try {
+            // Set the content type of the response
+            response.setContentType("application/octet-stream");
+            
+            // Get the output stream from the response
+            OutputStream outputStream = response.getOutputStream();
+            
+            // Create a SubmissionPublisher with a buffer size of 10
+            SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>(Executors.newFixedThreadPool(5), 10);
+            
+            // Subscribe an OutputStreamSubscriber to the publisher
+            OutputStreamSubscriber subscriber = new OutputStreamSubscriber(outputStream);
+            publisher.subscribe(subscriber);
+            
+            // Retrieve the data for the given file ID
+            byte[] data = getData(fileId);
+            
+            // Divide the data into chunks of the specified buffer size
+            int dataLength = data.length;
+            int startIndex = 0;
+            int endIndex = BUFFER_SIZE;
+            
+            // Submit each chunk of data to the publisher to be written to the output stream in parallel
+            while (startIndex < dataLength) {
+                if (endIndex > dataLength) {
+                    endIndex = dataLength;
+                }
+                byte[] chunk = Arrays.copyOfRange(data, startIndex, endIndex);
+                publisher.submit(chunk);
+                startIndex = endIndex;
+                endIndex += BUFFER_SIZE;
+            }
+            
+            // Close the publisher and flush and close the output stream
+            publisher.close();
+            outputStream.flush();
+            outputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private byte[] getData(String fileId) {
+        // Get the data for the given file ID
+        // ...
+    }
+    
+    private class OutputStreamSubscriber implements Flow.Subscriber<byte[]> {
+        private final OutputStream outputStream;
+        private Flow.Subscription subscription;
+        
+        public OutputStreamSubscriber(OutputStream outputStream) {
+            this.outputStream = outputStream;
+        }
+        
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            subscription.request(1);
+        }
+        
+        @Override
+        public void onNext(byte[] item) {
+            try {
+                outputStream.write(item);
+                subscription.request(1);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        @Override
+        public void onError(Throwable throwable) {
+            throwable.printStackTrace();
+        }
+        
+        @Override
+        public void onComplete() {
+            try {
+                outputStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
