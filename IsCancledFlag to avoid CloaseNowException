@@ -1,0 +1,88 @@
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
+import java.util.concurrent.SubmissionPublisher;
+
+public class HttpServletResponseOutputStreamPublisher implements Flow.Publisher<byte[]> {
+    private final HttpServletResponse response;
+
+    public HttpServletResponseOutputStreamPublisher(HttpServletResponse response) {
+        this.response = response;
+    }
+
+    @Override
+    public void subscribe(Flow.Subscriber<? super byte[]> subscriber) {
+        SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>(Executors.newFixedThreadPool(2), Flow.defaultBufferSize());
+        OutputStreamSubscriber outputStreamSubscriber = new OutputStreamSubscriber(response.getOutputStream());
+        publisher.subscribe(outputStreamSubscriber);
+        subscriber.onSubscribe(new Flow.Subscription() {
+            @Override
+            public void request(long n) {
+                // do nothing
+            }
+
+            @Override
+            public void cancel() {
+                publisher.close();
+                outputStreamSubscriber.close();
+            }
+        });
+        subscriber.onNext("".getBytes()); // Start the data flow
+    }
+
+    private class OutputStreamSubscriber implements Flow.Subscriber<byte[]> {
+        private final OutputStream outputStream;
+        private Flow.Subscription subscription;
+        private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+        private boolean isClosed = false;
+
+        public OutputStreamSubscriber(OutputStream outputStream) {
+            this.outputStream = outputStream;
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            subscription.request(1);
+        }
+
+        @Override
+        public void onNext(byte[] item) {
+            if (!isClosed) {
+                executorService.submit(() -> {
+                    try {
+                        outputStream.write(item);
+                        subscription.request(1);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        close();
+                    }
+                });
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            throwable.printStackTrace();
+            close();
+        }
+
+        @Override
+        public void onComplete() {
+            close();
+        }
+
+        public void close() {
+            isClosed = true;
+            executorService.shutdown();
+            try {
+                outputStream.flush();
+                outputStream.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
