@@ -1,0 +1,84 @@
+public void getData() {
+    response.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+    response.setHeader("Content-Disposition", "attachment; filename=\"data.bin\"");
+
+    SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>(executor, Flow.defaultBufferSize());
+
+    // create a new thread to publish the data to the subscriber
+    executor.submit(() -> {
+        try {
+            // generate the data and publish it to the subscriber
+            byte[] data = "hello world".getBytes(StandardCharsets.UTF_8);
+            for (byte b : data) {
+                publisher.submit(new byte[]{b});
+            }
+            publisher.close();
+        } catch (Throwable t) {
+            publisher.closeExceptionally(t);
+        }
+    });
+
+    // create a new CountDownLatch instance
+    CountDownLatch latch = new CountDownLatch(1);
+
+    try {
+        // write the data to the HttpServletResponse output stream using the publisher subscriber
+        publisher.subscribe(new HttpServletResponseOutputStreamSubscriber(response, latch));
+    } catch (Throwable t) {
+        t.printStackTrace();
+    }
+
+    // wait for the latch to be signaled before closing the response output stream
+    try {
+        latch.await();
+    } catch (InterruptedException e) {
+        e.printStackTrace();
+    }
+}
+
+
+//=================================
+private static class HttpServletResponseOutputStreamSubscriber implements Flow.Subscriber<byte[]> {
+    private final HttpServletResponse response;
+    private final CountDownLatch latch;
+    private Flow.Subscription subscription;
+
+    public HttpServletResponseOutputStreamSubscriber(HttpServletResponse response, CountDownLatch latch) {
+        this.response = response;
+        this.latch = latch;
+    }
+
+    @Override
+    public void onSubscribe(Flow.Subscription subscription) {
+        this.subscription = subscription;
+        subscription.request(1);
+    }
+
+    @Override
+    public void onNext(byte[] item) {
+        try {
+            response.getOutputStream().write(item);
+            subscription.request(1);
+        } catch (IOException e) {
+            e.printStackTrace();
+            subscription.cancel();
+        }
+    }
+
+    @Override
+    public void onError(Throwable throwable) {
+        throwable.printStackTrace();
+    }
+
+    @Override
+    public void onComplete() {
+        try {
+            response.getOutputStream().flush();
+            latch.countDown();  // signal that all items have been processed
+            response.getOutputStream().close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
