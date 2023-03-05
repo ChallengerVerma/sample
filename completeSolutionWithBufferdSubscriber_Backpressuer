@@ -1,0 +1,68 @@
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Flow.*;
+import java.util.concurrent.SubmissionPublisher;
+
+public class DataProcessor {
+    public static void main(String[] args) throws Exception {
+        // Create a submission publisher with a buffer size of 50
+        SubmissionPublisher<String> publisher = new SubmissionPublisher<>(Executors.newFixedThreadPool(2), 50);
+
+        // Create a regular subscriber
+        Subscriber<String> subscriber = new Subscriber<String>() {
+            private Subscription subscription;
+
+            @Override
+            public void onSubscribe(Subscription subscription) {
+                this.subscription = subscription;
+                subscription.request(1); // Request one item at a time
+            }
+
+            @Override
+            public void onNext(String item) {
+                // Process the item here
+                System.out.println("Processed item: " + item);
+
+                // Request the next item
+                subscription.request(1);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                throwable.printStackTrace();
+            }
+
+            @Override
+            public void onComplete() {
+                System.out.println("Processing complete.");
+            }
+        };
+
+        // Create a buffered subscriber that wraps the regular subscriber
+        BufferedSubscriber<String> bufferedSubscriber = new BufferedSubscriber<String>(subscriber) {
+            @Override
+            protected void onBufferFull(List<String> buffer) {
+                // Process the buffered items one at a time
+                for (String item : buffer) {
+                    submit(item);
+                }
+                close();
+            }
+        };
+
+        // Subscribe the regular and buffered subscribers to the publisher
+        publisher.subscribe(subscriber);
+        publisher.subscribe(bufferedSubscriber);
+
+        // Read the data file and submit the items to the publisher
+        String filePath = "path/to/4gb/file";
+        Files.lines(Paths.get(filePath)).forEach(publisher::submit);
+
+        // Wait for all items to be processed
+        publisher.close();
+        publisher.awaitTermination(Long.MAX_VALUE, java.util.concurrent.TimeUnit.NANOSECONDS);
+    }
+}
