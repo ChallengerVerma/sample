@@ -1,0 +1,73 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
+
+public class BufferedSubscriber<T> implements Subscriber<T> {
+    private final Subscriber<? super T> actualSubscriber;
+    private Subscription subscription;
+    private final int bufferSize;
+    private int bufferUsed;
+    private List<T> overflowBuffer;
+
+    public BufferedSubscriber(Subscriber<? super T> actualSubscriber, int bufferSize) {
+        this.actualSubscriber = actualSubscriber;
+        this.bufferSize = bufferSize;
+        this.overflowBuffer = new ArrayList<>();
+    }
+
+    @Override
+    public void onSubscribe(Subscription subscription) {
+        this.subscription = subscription;
+        actualSubscriber.onSubscribe(subscription);
+        subscription.request(bufferSize);
+    }
+
+    @Override
+    public void onNext(T item) {
+        if (bufferUsed < bufferSize) {
+            actualSubscriber.onNext(item);
+            bufferUsed++;
+            subscription.request(1);
+        } else {
+            overflowBuffer.add(item);
+        }
+    }
+
+    @Override
+    public void onError(Throwable throwable) {
+        actualSubscriber.onError(throwable);
+    }
+
+    @Override
+    public void onComplete() {
+        actualSubscriber.onComplete();
+    }
+
+    public void onBufferFull() {
+        // If the overflow buffer is also full, throw an exception to indicate that
+        // we cannot buffer any more items
+        if (overflowBuffer.size() >= bufferSize) {
+            throw new RuntimeException("Buffer full");
+        }
+
+        // Otherwise, move the items from the main buffer to the overflow buffer
+        List<T> temp = new ArrayList<>(overflowBuffer);
+        overflowBuffer = new ArrayList<>();
+        overflowBuffer.addAll(temp);
+
+        // Signal the publisher to send more items
+        subscription.request(bufferSize - bufferUsed);
+        bufferUsed = 0;
+
+        // Drain the overflow buffer
+        for (T item : temp) {
+            actualSubscriber.onNext(item);
+            bufferUsed++;
+            if (bufferUsed == bufferSize) {
+                onBufferFull();
+                break;
+            }
+        }
+    }
+}
