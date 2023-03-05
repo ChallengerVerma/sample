@@ -1,0 +1,54 @@
+ExecutorService executor = Executors.newFixedThreadPool(4);
+SubmissionPublisher<byte[]> publisher = new SubmissionPublisher<>(executor, 1024);
+Flow.Subscriber<byte[]> subscriber = ...;
+
+// Use a custom subscriber that buffers items internally
+Flow.Subscriber<byte[]> bufferedSubscriber = new Flow.Subscriber<byte[]>() {
+    private final int bufferSize = 1024;
+    private final ArrayBlockingQueue<byte[]> buffer = new ArrayBlockingQueue<>(bufferSize);
+    private Flow.Subscription subscription;
+
+    @Override
+    public void onSubscribe(Flow.Subscription subscription) {
+        this.subscription = subscription;
+        this.subscription.request(bufferSize);
+    }
+
+    @Override
+    public void onNext(byte[] item) {
+        boolean added = buffer.offer(item);
+        if (!added) {
+            System.out.println("Buffer full!");
+        }
+        subscription.request(1);
+    }
+
+    @Override
+    public void onError(Throwable throwable) {
+        throwable.printStackTrace();
+    }
+
+    @Override
+    public void onComplete() {
+        // Process any remaining items in the buffer
+        while (!buffer.isEmpty()) {
+            byte[] item = buffer.poll();
+            subscriber.onNext(item);
+        }
+        subscriber.onComplete();
+    }
+};
+
+// Subscribe to the publisher
+publisher.subscribe(bufferedSubscriber);
+
+// Publish the data
+for (int i = 0; i < numIterations; i++) {
+    byte[] data = getDataForIteration(i);
+    publisher.submit(data);
+}
+
+// Wait for the subscriber to finish
+publisher.close();
+executor.shutdown();
+executor.awaitTermination(1, TimeUnit.MINUTES);
