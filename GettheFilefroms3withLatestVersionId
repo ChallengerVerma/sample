@@ -1,0 +1,40 @@
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+
+public class S3FileDownloader {
+
+    private final AmazonS3 s3Client;
+
+    public S3FileDownloader() {
+        s3Client = AmazonS3ClientBuilder.defaultClient();
+    }
+
+    public void downloadFiles(String bucketName, String downloadFolder) throws IOException {
+        List<S3ObjectSummary> objectSummaries = s3Client.listObjects(bucketName).getObjectSummaries();
+
+        for (S3ObjectSummary objectSummary : objectSummaries) {
+            String key = objectSummary.getKey();
+            String versionId = s3Client.getObject(bucketName, key).getObjectMetadata().getVersionId();
+            File file = new File(downloadFolder + "/" + key);
+
+            s3Client.getObject(new GetObjectRequest(bucketName, key, versionId), file);
+        }
+    }
+}
+
+
+In the above code, the latest version ID is being retrieved using the getObjectMetadata().getVersionId() method.
+
+When an S3 object is uploaded with versioning enabled, each new version of the object gets a unique version ID. By default, S3 assigns a version ID that is a randomly generated string of letters and numbers. When a new version of the object is uploaded, the version ID for the previous version is retained and the new version gets a new version ID.
+
+When you retrieve an object from S3 using the getObject method, you can specify the version ID of the object you want to retrieve by passing it as a parameter to the GetObjectRequest constructor.
+
+In the code above, we first retrieve a list of all the object summaries in the S3 bucket using the listObjects method. For each object summary, we then use the getObjectMetadata method to get the object metadata, which includes the version ID of the latest version of the object. We then use this version ID in the GetObjectRequest constructor to download the object with the latest version ID.
+
+Therefore, the code is ensuring that the latest version ID is being retrieved for each object by getting the object metadata, which includes the version ID of the latest version of the object.
