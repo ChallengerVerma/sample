@@ -1,1 +1,31 @@
 aws cloudwatch get-metric-data --metric-data-queries '[{"Id":"myMetricQuery","MetricStat":{"Metric":{"Namespace":"MyNamespace","MetricName":"MyMetric","Dimensions":[{"Name":"Environment","Value":"Production"},{"Name":"InstanceId","Value":"i-1234567890abcdef0"}]},"Period":60,"Stat":"Average"}}]' --start-time 2023-11-05T00:00:00Z --end-time 2023-11-05T01:00:00Z
+
+List all the metrics in cloudwatch metric:-
+import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.cloudwatch.model.ListMetricsRequest;
+import software.amazon.awssdk.services.cloudwatch.model.ListMetricsResponse;
+import software.amazon.awssdk.services.cloudwatch.model.Metric;
+
+public class CloudWatchMetricsSearch {
+    private static final CloudWatchClient cloudWatch = CloudWatchClient.builder()
+            .region(Region.US_EAST_1)
+            .build();
+
+    public static void main(String[] args) {
+        ListMetricsRequest request = ListMetricsRequest.builder()
+                .namespace("MyNamespace")
+                .metricName("MyMetric")
+                .dimensions(Dimension.builder().name("Environment").value("Production").build())
+                .build();
+
+        ListMetricsResponse response = cloudWatch.listMetrics(request);
+
+        for (Metric metric : response.metrics()) {
+            System.out.println("Metric Name: " + metric.metricName());
+            metric.dimensions().forEach(dimension -> {
+                System.out.println("Dimension Name: " + dimension.name() + ", Value: " + dimension.value());
+            });
+        }
+    }
+}
+
