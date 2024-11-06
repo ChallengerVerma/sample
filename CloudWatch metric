@@ -1,6 +1,10 @@
 aws cloudwatch get-metric-data --metric-data-queries '[{"Id":"myMetricQuery","MetricStat":{"Metric":{"Namespace":"MyNamespace","MetricName":"MyMetric","Dimensions":[{"Name":"Environment","Value":"Production"},{"Name":"InstanceId","Value":"i-1234567890abcdef0"}]},"Period":60,"Stat":"Average"}}]' --start-time 2023-11-05T00:00:00Z --end-time 2023-11-05T01:00:00Z
 
 List all the metrics in cloudwatch metric:-
+
+CLI cpmmand:-- aws cloudwatch list-metrics --namespace "MyNamespace" --metric-name "MyMetric" --dimensions Name=Environment,Value=Production
+
+Java Code:-
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatch.model.ListMetricsRequest;
 import software.amazon.awssdk.services.cloudwatch.model.ListMetricsResponse;
