@@ -33,3 +33,42 @@ public class CloudWatchMetricsSearch {
     }
 }
 
+import software.amazon.awssdk.services.cloudwatch.model.Dimension;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+public class DimensionConverter {
+
+    public static MetricDimensions convertDimensions(List<Dimension> dimensions) {
+        Map<String, String> dimensionMap = dimensions.stream()
+                .collect(Collectors.toMap(Dimension::name, Dimension::value));
+
+        return new MetricDimensions.Builder()
+                .environment(Optional.ofNullable(dimensionMap.get("Environment")).orElse("Unknown"))
+                .instanceId(Optional.ofNullable(dimensionMap.get("InstanceId")).orElse("Unknown"))
+                .build();
+    }
+
+    public static void main(String[] args) {
+        Dimension environmentDimension = Dimension.builder()
+                .name("Environment")
+                .value("Production")
+                .build();
+
+        Dimension instanceDimension = Dimension.builder()
+                .name("InstanceId")
+                .value("i-1234567890abcdef0")
+                .build();
+
+        List<Dimension> dimensions = List.of(environmentDimension, instanceDimension);
+
+        MetricDimensions metricDimensions = convertDimensions(dimensions);
+
+        System.out.println(metricDimensions);
+    }
+}
+
+
