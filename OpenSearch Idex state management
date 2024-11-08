@@ -1,0 +1,67 @@
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_opensearch_domain" "example" {
+  domain_name = "example-domain"
+  engine_version = "OpenSearch_1.0"
+
+  cluster_config {
+    instance_type = "m5.large.search"
+  }
+
+  ebs_options {
+    ebs_enabled = true
+    volume_size = 10
+  }
+
+  node_to_node_encryption {
+    enabled = true
+  }
+
+  encrypt_at_rest {
+    enabled = true
+  }
+}
+
+resource "aws_opensearch_index_policy" "example_policy" {
+  domain_name = aws_opensearch_domain.example.domain_name
+  policy_name = "example-policy"
+
+  policy = <<POLICY
+{
+  "policy": {
+    "description": "Example ISM policy",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {
+            "rollover": {
+              "min_index_age": "1d"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": {
+              "min_index_age": "30d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          {
+            "delete": {}
+          }
+        ]
+      }
+    ]
+  }
+}
+POLICY
+}
