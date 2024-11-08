@@ -1,0 +1,36 @@
+import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
+public class CloudWatchCustomMetrics {
+    public static void main(String[] args) {
+        CloudWatchClient cloudWatchClient = CloudWatchClient.builder()
+                .region(Region.US_EAST_1) // Specify your region
+                .build();
+
+        String query = "SELECT AVG(MyCustomMetric) FROM 'MyCustomNamespace' WHERE DimensionName LIKE 'pattern%' GROUP BY DimensionName ORDER BY AVG(MyCustomMetric) DESC";
+
+        MetricDataQuery metricDataQuery = MetricDataQuery.builder()
+                .id("m1")
+                .expression(query)
+                .returnData(true)
+                .build();
+
+        GetMetricDataRequest getMetricDataRequest = GetMetricDataRequest.builder()
+                .metricDataQueries(metricDataQuery)
+                .startTime(Instant.now().minus(7, ChronoUnit.DAYS))
+                .endTime(Instant.now())
+                .build();
+
+        GetMetricDataResponse response = cloudWatchClient.getMetricData(getMetricDataRequest);
+
+        response.metricDataResults().forEach(result -> {
+            System.out.println("Metric: " + result.id());
+            result.values().forEach(value -> System.out.println("Value: " + value));
+        });
+    }
+}
