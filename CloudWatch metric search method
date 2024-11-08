@@ -1,0 +1,45 @@
+import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
+public class CloudWatchCustomMetrics {
+    public static void main(String[] args) {
+        CloudWatchClient cloudWatchClient = CloudWatchClient.builder()
+                .region(Region.US_EAST_1) // Specify your region
+                .build();
+
+        String instanceIdPattern = "i-1234*"; // Example pattern for InstanceId
+        String environmentPattern = "Prod*";  // Example pattern for Environment
+
+        String queryTemplate = "SEARCH('InstanceId=\"%s\" AND Environment=\"%s\"', 'Average', 300) " +
+                               "| SELECT AVG(My_CustomMetric) " +
+                               "GROUP BY InstanceId, Environment " +
+                               "ORDER BY AVG(My_CustomMetric) DESC";
+
+        String query = String.format(queryTemplate, instanceIdPattern, environmentPattern);
+
+        MetricDataQuery metricDataQuery = MetricDataQuery.builder()
+                .id("m1")
+                .expression(query)
+                .returnData(true)
+                .period(300) // Period in seconds (e.g., 300 seconds = 5 minutes)
+                .build();
+
+        GetMetricDataRequest getMetricDataRequest = GetMetricDataRequest.builder()
+                .metricDataQueries(metricDataQuery)
+                .startTime(Instant.now().minus(7, ChronoUnit.DAYS)) // Start time 7 days ago
+                .endTime(Instant.now()) // End time now
+                .build();
+
+        GetMetricDataResponse response = cloudWatchClient.getMetricData(getMetricDataRequest);
+
+        response.metricDataResults().forEach(result -> {
+            System.out.println("Metric: " + result.id());
+            result.values().forEach(value -> System.out.println("Value: " + value));
+        });
+    }
+}
