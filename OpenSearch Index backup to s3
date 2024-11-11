@@ -1,0 +1,18 @@
+provider "elasticstack" {
+  elasticsearch {
+    url      = "https://your-opensearch-endpoint"
+    username = "your-username"
+    password = "your-password"
+  }
+}
+
+resource "elasticstack_elasticsearch_snapshot_repository" "my_s3_repository" {
+  name = "my_s3_repository"
+  type = "s3"
+
+  settings = jsonencode({
+    bucket   = "your-bucket-name"
+    region   = "us-east-1"
+    role_arn = "arn:aws:iam::123456789012:role/opensearch-s3-role"
+  })
+}
