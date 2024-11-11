@@ -27,7 +27,7 @@ resource "aws_opensearch_domain" "example" {
 resource "null_resource" "apply_ism_policy" {
   provisioner "local-exec" {
     command = <<EOT
-curl -X PUT "https://${aws_opensearch_domain.example.endpoint}/_plugins/_ism/policies/example-policy" -H 'Content-Type: application/json' -d '{
+curl -u "${var.opensearch_username}:${var.opensearch_password}" -X PUT "${aws_opensearch_domain.example.endpoint}/_plugins/_ism/templates" -H 'Content-Type: application/json' -d '{
   "policy": {
     "description": "Example ISM policy",
     "default_state": "hot",
