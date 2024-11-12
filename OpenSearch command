@@ -1,0 +1,5 @@
+curl -X PUT "https://your-opensearch-domain/_cluster/settings" -H 'Content-Type: application/json' -d '{
+  "persistent": {
+    "plugins.index_management.enabled": true
+  }
+}'
