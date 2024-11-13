@@ -1,0 +1,40 @@
+# Configure the S3 snapshot repository
+resource "opensearch_snapshot_repository" "s3_repository" {
+  name = "s3-repository"
+  type = "s3"
+  settings = {
+    bucket = "your-s3-bucket-name"
+    region = "your-s3-region"
+    role_arn = "your-iam-role-arn"
+  }
+}
+
+# ISM policy to snapshot and delete documents older than 7 days
+resource "opensearch_ism_policy" "example_policy" {
+  policy_id   = "example-policy"
+  description = "ISM policy to snapshot and delete documents older than 7 days"
+  default_state = "hot"
+
+  states {
+    name = "hot"
+    actions {
+      snapshot {
+        repository = opensearch_snapshot_repository.s3_repository.name
+        snapshot_name = "transparency-snapshot-{{ctx.index}}-{{ctx.now}}"
+      }
+      delete {
+        min_index_age = "7d"
+      }
+    }
+  }
+}
+
+# Apply the ISM policy to the transparency index
+resource "opensearch_index" "transparency" {
+  name = "transparency"
+  body = jsonencode({
+    settings = {
+      "index.lifecycle.name" = opensearch_ism_policy.example_policy.policy_id
+    }
+  })
+}
