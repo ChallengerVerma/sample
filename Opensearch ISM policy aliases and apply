@@ -1,0 +1,58 @@
+provider "null" {}
+
+resource "null_resource" "create_ism_policy" {
+  provisioner "local-exec" {
+    command = <<EOT
+      curl -X PUT "https://your-elasticsearch-endpoint/_ilm/policy/example_policy" -H "Content-Type: application/json" -d '{
+        "policy": {
+          "phases": {
+            "hot": {
+              "actions": {
+                "rollover": {
+                  "max_size": "50GB",
+                  "max_age": "30d"
+                }
+              }
+            },
+            "delete": {
+              "min_age": "90d",
+              "actions": {
+                "delete": {}
+              }
+            }
+          }
+        }
+      }'
+    EOT
+  }
+}
+
+resource "null_resource" "create_index_template" {
+  provisioner "local-exec" {
+    command = <<EOT
+      curl -X PUT "https://your-elasticsearch-endpoint/_index_template/example_template" -H "Content-Type: application/json" -d '{
+        "index_patterns": ["example_index*"],
+        "template": {
+          "settings": {
+            "index.lifecycle.name": "example_policy",
+            "index.lifecycle.rollover_alias": "example_index"
+          }
+        }
+      }'
+    EOT
+  }
+}
+
+resource "null_resource" "create_initial_index" {
+  provisioner "local-exec" {
+    command = <<EOT
+      curl -X PUT "https://your-elasticsearch-endpoint/example_index-000001" -H "Content-Type: application/json" -d '{
+        "aliases": {
+          "example_index": {
+            "is_write_index": true
+          }
+        }
+      }'
+    EOT
+  }
+}
