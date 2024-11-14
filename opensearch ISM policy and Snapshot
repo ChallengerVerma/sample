@@ -38,3 +38,19 @@ resource "opensearch_index" "transparency" {
     }
   })
 }
+
+terraform {
+  required_providers {
+    opensearch = {
+      source  = "opensearch-project/opensearch"
+      version = "1.0.0"  # Replace with the desired version
+    }
+  }
+}
+
+provider "opensearch" {
+  url      = "https://your-opensearch-endpoint"
+  username = "your-username"
+  password = "your-password"
+}
+
