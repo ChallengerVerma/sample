@@ -1,0 +1,44 @@
+import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.core.PutPolicyRequest;
+import org.opensearch.client.opensearch.core.PutPolicyResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ISMService {
+
+    @Autowired
+    private OpenSearchClient openSearchClient;
+
+    public void createPolicy() throws Exception {
+        String policyJson = """
+        {
+            "policy": {
+                "policy_id": "example_policy",
+                "description": "Example ISM policy",
+                "default_state": "hot",
+                "states": [
+                    {
+                        "name": "hot",
+                        "actions": [],
+                        "transitions": []
+                    }
+                ]
+            }
+        }
+        """;
+
+        PutPolicyRequest request = new PutPolicyRequest.Builder()
+                .policyId("example_policy")
+                .policy(policyJson)
+                .build();
+
+        PutPolicyResponse response = openSearchClient.ism().putPolicy(request);
+
+        if (response.isAcknowledged()) {
+            System.out.println("Policy created successfully.");
+        } else {
+            System.out.println("Failed to create policy.");
+        }
+    }
+}
