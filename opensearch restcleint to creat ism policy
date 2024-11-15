@@ -4,50 +4,8 @@ import org.opensearch.client.opensearch.core.PutPolicyResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-@Service
-public class ISMService {
-
-    @Autowired
-    private OpenSearchClient openSearchClient;
-
-    public void createPolicy() throws Exception {
-        String policyJson = """
-        {
-            "policy": {
-                "policy_id": "example_policy",
-                "description": "Example ISM policy",
-                "default_state": "hot",
-                "states": [
-                    {
-                        "name": "hot",
-                        "actions": [],
-                        "transitions": []
-                    }
-                ]
-            }
-        }
-        """;
-
-        PutPolicyRequest request = new PutPolicyRequest.Builder()
-                .policyId("example_policy")
-                .policy(policyJson)
-                .build();
-
-        PutPolicyResponse response = openSearchClient.ism().putPolicy(request);
-
-        if (response.isAcknowledged()) {
-            System.out.println("Policy created successfully.");
-        } else {
-            System.out.println("Failed to create policy.");
-        }
-    }
-}
-
-//=========================================
 import javax.annotation.PostConstruct;
-import org.opensearch.client.opensearch.OpenSearchClient;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
+import java.io.IOException;
 
 @Service
 public class ISMService {
@@ -75,19 +33,17 @@ public class ISMService {
             }
             """;
 
-            PutPolicyRequest request = new PutPolicyRequest.Builder()
-                    .policyId("example_policy")
-                    .policy(policyJson)
-                    .build();
+            var response = openSearchClient.transport().performRequest(
+                new Request("PUT", "/_plugins/_ism/policies/example_policy")
+                    .setJsonEntity(policyJson)
+            );
 
-            PutPolicyResponse response = openSearchClient.ism().putPolicy(request);
-
-            if (response.isAcknowledged()) {
+            if (response.getStatusLine().getStatusCode() == 200) {
                 System.out.println("Policy created successfully.");
             } else {
-                System.out.println("Failed to create policy.");
+                System.out.println("Failed to create policy: " + response.getStatusLine());
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.out.println("Failed to create policy: " + e.getMessage());
         }
     }
