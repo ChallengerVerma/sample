@@ -1,0 +1,57 @@
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.Base64Utils;
+import com.fasterxml.jackson.databind.JsonNode;
+import javax.annotation.PostConstruct;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import org.springframework.core.io.ClassPathResource;
+
+@Component
+public class MyBean {
+
+    private final RestTemplate restTemplate;
+    private final AwsSecretReader awsSecretReader;
+
+    @Value("${ism.policy.min_index_age}")
+    private String minIndexAge;
+
+    public MyBean(RestTemplate restTemplate, AwsSecretReader awsSecretReader) {
+        this.restTemplate = restTemplate;
+        this.awsSecretReader = awsSecretReader;
+    }
+
+    @PostConstruct
+    public void init() throws Exception {
+        String url = "https://your-opensearch-endpoint/_plugins/_ism/policies/example_policy";
+
+        // Read the JSON file from the resources folder
+        Path path = Paths.get(new ClassPathResource("policy.json").getURI());
+        String policyJson = new String(Files.readAllBytes(path));
+
+        // Replace the placeholder with the actual value from configuration
+        policyJson = policyJson.replace("{{min_index_age}}", minIndexAge);
+
+        // Fetch username and password from AWS Secrets Manager using AwsSecretReader
+        JsonNode secret = awsSecretReader.getSecret("your-secret-name");
+        String username = secret.get("username").asText();
+        String password = secret.get("password").asText();
+        String auth = username + ":" + password;
+        String encodedAuth = Base64Utils.encodeToString(auth.getBytes());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        headers.set("Authorization", "Basic " + encodedAuth);
+
+        HttpEntity<String> request = new HttpEntity<>(policyJson, headers);
+        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, request, String.class);
+
+        System.out.println("Response from OpenSearch API: " + response.getBody());
+    }
+}
