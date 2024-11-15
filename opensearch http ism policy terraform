@@ -1,0 +1,23 @@
+provider "http" {}
+
+resource "http_request" "create_ism_policy" {
+  url = "https://your-opensearch-endpoint/_plugins/_ism/policies/example_policy"
+  method = "PUT"
+  request_headers = {
+    "Content-Type" = "application/json"
+  }
+  request_body = file("${path.module}/policies/example_policy.json")
+}
+
+resource "http_request" "apply_ism_policy" {
+  url = "https://your-opensearch-endpoint/example_index/_settings"
+  method = "PUT"
+  request_headers = {
+    "Content-Type" = "application/json"
+  }
+  request_body = jsonencode({
+    "index" = {
+      "opendistro.index_state_management.policy_id" = "example_policy"
+    }
+  })
+}
