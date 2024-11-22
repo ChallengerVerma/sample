@@ -1,0 +1,37 @@
+To ensure that your Amazon S3 buckets enforce secure transport (HTTPS) through a bucket policy, you can create a policy that explicitly denies access to requests that do not use secure transport. Here’s an example of how you can do this:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Id": "ExamplePolicy",
+  "Statement": [
+    {
+      "Sid": "DenyNonSSLRequests",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::your-bucket-name",
+        "arn:aws:s3:::your-bucket-name/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    }
+  ]
+}
+```
+
+This policy denies all actions on the bucket and its objects if the request does not use HTTPS (i.e., `aws:SecureTransport` is `false`). To apply this policy:
+
+1. Open the Amazon S3 console.
+2. Select your bucket.
+3. Go to the **Permissions** tab.
+4. Under **Bucket Policy**, click **Edit**.
+5. Paste the policy and save changes.
+
+This ensures that only secure (HTTPS) requests are allowed, enhancing the security of your data in transit[1](https://repost.aws/knowledge-center/s3-bucket-policy-for-config-rule)[2](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html).
+
+If you have any more questions or need further assistance, feel free to ask!
