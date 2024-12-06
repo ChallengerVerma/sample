@@ -1,0 +1,1 @@
+aws s3 cp my-local-dir s3://my-s3-bucket/my-s3-folder --recursive
