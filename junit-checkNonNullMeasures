@@ -1,0 +1,39 @@
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class EmployeeTest {
+
+    @Test
+    public void testCountNonNullAttributes_AllNull() {
+        Employee emp = new Employee();
+        assertEquals(0, Employee.countNonNullAttributes(emp));
+    }
+
+    @Test
+    public void testCountNonNullAttributes_SomeNonNull() {
+        Employee emp = new Employee();
+        emp.setName("John");
+        emp.setAge(30);
+        assertEquals(2, Employee.countNonNullAttributes(emp));
+    }
+
+    @Test
+    public void testCountNonNullAttributes_AllNonNull() {
+        Employee emp = new Employee();
+        emp.setName("John");
+        emp.setAge(30);
+        emp.setDepartment("HR");
+        emp.setSalary(50000.0);
+        assertEquals(4, Employee.countNonNullAttributes(emp));
+    }
+
+    @Test
+    public void testCountNonNullAttributes_Mixed() {
+        Employee emp = new Employee();
+        emp.setName("John");
+        emp.setAge(30);
+        emp.setDepartment(null);
+        emp.setSalary(50000.0);
+        assertEquals(3, Employee.countNonNullAttributes(emp));
+    }
+}
