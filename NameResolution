@@ -1,0 +1,63 @@
+import java.util.*;
+
+class Emp {
+    int age;
+    String mNumber;
+    String depName;
+
+    // Constructor, getters, setters
+}
+
+class EmployeeDTO {
+    String name;
+    int age;
+    String mNumber;
+    String depName;
+
+    // Constructor, getters, setters
+}
+
+public class EmployeeMapper {
+
+    public static Map<Long, String> buildBidirectionalMap(
+            Map<String, Long> nameToEmpID,
+            Map<Long, Emp> empMap,
+            List<EmployeeDTO> employeeDTOList) {
+
+        // Group names by employee ID
+        Map<Long, Set<String>> empIdToNames = new HashMap<>();
+        for (Map.Entry<String, Long> entry : nameToEmpID.entrySet()) {
+            empIdToNames
+                .computeIfAbsent(entry.getValue(), k -> new HashSet<>())
+                .add(entry.getKey());
+        }
+
+        // Build a map from name to EmployeeDTO for quick lookup
+        Map<String, EmployeeDTO> nameToDTO = new HashMap<>();
+        for (EmployeeDTO dto : employeeDTOList) {
+            nameToDTO.put(dto.name, dto);
+        }
+
+        // Final map: empId -> selected name
+        Map<Long, String> finalMap = new HashMap<>();
+
+        for (Map.Entry<Long, Set<String>> entry : empIdToNames.entrySet()) {
+            Long empId = entry.getKey();
+            Set<String> names = entry.getValue();
+            Emp emp = empMap.get(empId);
+
+            for (String name : names) {
+                EmployeeDTO dto = nameToDTO.get(name);
+                if (dto != null &&
+                    dto.age == emp.age &&
+                    dto.mNumber.equals(emp.mNumber) &&
+                    dto.depName.equals(emp.depName)) {
+                    finalMap.put(empId, name);
+                    break; // Stop after finding the first matching name
+                }
+            }
+        }
+
+        return finalMap;
+    }
+}
