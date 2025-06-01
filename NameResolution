@@ -1,4 +1,8 @@
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+
 import java.util.*;
+import java.util.stream.Collectors;
 
 class Emp {
     int age;
@@ -17,12 +21,22 @@ class EmployeeDTO {
     // Constructor, getters, setters
 }
 
+@FunctionalInterface
+interface EmployeeMatcher {
+    boolean matches(Emp emp, EmployeeDTO dto);
+}
+
 public class EmployeeMapper {
 
-    public static Map<Long, String> buildBidirectionalMap(
+    public static BiMap<Long, String> buildBidirectionalMap(
             Map<String, Long> nameToEmpID,
             Map<Long, Emp> empMap,
-            List<EmployeeDTO> employeeDTOList) {
+            List<EmployeeDTO> employeeDTOList,
+            EmployeeMatcher matcher) {
+
+        // Map name to DTO for quick lookup
+        Map<String, EmployeeDTO> nameToDTO = employeeDTOList.stream()
+                .collect(Collectors.toMap(dto -> dto.name, dto -> dto));
 
         // Group names by employee ID
         Map<Long, Set<String>> empIdToNames = new HashMap<>();
@@ -32,32 +46,36 @@ public class EmployeeMapper {
                 .add(entry.getKey());
         }
 
-        // Build a map from name to EmployeeDTO for quick lookup
-        Map<String, EmployeeDTO> nameToDTO = new HashMap<>();
-        for (EmployeeDTO dto : employeeDTOList) {
-            nameToDTO.put(dto.name, dto);
-        }
-
-        // Final map: empId -> selected name
-        Map<Long, String> finalMap = new HashMap<>();
+        // Create a BiMap for bidirectional lookup
+        BiMap<Long, String> biMap = HashBiMap.create();
 
         for (Map.Entry<Long, Set<String>> entry : empIdToNames.entrySet()) {
             Long empId = entry.getKey();
-            Set<String> names = entry.getValue();
             Emp emp = empMap.get(empId);
 
-            for (String name : names) {
+            for (String name : entry.getValue()) {
                 EmployeeDTO dto = nameToDTO.get(name);
-                if (dto != null &&
-                    dto.age == emp.age &&
-                    dto.mNumber.equals(emp.mNumber) &&
-                    dto.depName.equals(emp.depName)) {
-                    finalMap.put(empId, name);
-                    break; // Stop after finding the first matching name
+                if (dto != null && matcher.matches(emp, dto)) {
+                    biMap.put(empId, name);
+                    break; // Stop after first match
                 }
             }
         }
 
-        return finalMap;
+        return biMap;
     }
 }
+==============================
+public class DefaultEmployeeMatcher implements EmployeeMatcher {
+    @Override
+    public boolean matches(Emp emp, EmployeeDTO dto) {
+        return emp.age == dto.age &&
+               emp.mNumber.equals(dto.mNumber) &&
+               emp.depName.equals(dto.depName);
+    }
+}
+====================
+Use It like this:-
+EmployeeMatcher matcher = new DefaultEmployeeMatcher();
+BiMap<Long, String> biMap = EmployeeMapper.buildBidirectionalMap(
+    nameToEmpID, empMap, employeeDTOList, matcher);
