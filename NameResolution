@@ -129,4 +129,34 @@ public class AssetComparator {
         return true;
     }
 }
+==============improved code======================
+
+public class AssetComparator {
+
+    public static boolean compareAssets(Sec sec, List<Asset> assetList) {
+        Map<AssetType, String> assetMap = new EnumMap<>(AssetType.class);
+        for (Asset asset : assetList) {
+            assetMap.put(asset.type, asset.assetID);
+        }
+
+        Map<AssetType, String> secMap = Map.of(
+            AssetType.CUSIP, sec.cusip,
+            AssetType.ISIN, sec.ISIN,
+            AssetType.SEDOL, sec.SEDOL,
+            AssetType.CINS, sec.CINS
+        );
+
+        for (Map.Entry<AssetType, String> entry : secMap.entrySet()) {
+            AssetType type = entry.getKey();
+            String secValue = entry.getValue();
+            String assetValue = assetMap.get(type);
+
+            if (secValue != null && assetValue != null && !secValue.equals(assetValue)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
 
