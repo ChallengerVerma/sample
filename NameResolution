@@ -80,3 +80,53 @@ Use It like this:-
 EmployeeMatcher matcher = new DefaultEmployeeMatcher();
 BiMap<Long, String> biMap = EmployeeMapper.buildBidirectionalMap(
     nameToEmpID, empMap, employeeDTOList, matcher);
+
+-----------------comparator----------------
+import java.util.*;
+
+class Asset {
+    String id;
+    String assetID;
+    AssetType type;
+}
+
+enum AssetType {
+    CUSIP, ISIN, SEDOL, CINS;
+}
+
+class Sec {
+    String id;
+    String cusip;
+    String ISIN;
+    String SEDOL;
+    String CINS;
+}
+
+public class AssetComparator {
+
+    public static boolean compareAssets(Sec sec, List<Asset> assetList) {
+        Map<AssetType, String> assetMap = new HashMap<>();
+        for (Asset asset : assetList) {
+            assetMap.put(asset.type, asset.assetID);
+        }
+
+        if (sec.cusip != null && assetMap.containsKey(AssetType.CUSIP)) {
+            if (!sec.cusip.equals(assetMap.get(AssetType.CUSIP))) return false;
+        }
+
+        if (sec.ISIN != null && assetMap.containsKey(AssetType.ISIN)) {
+            if (!sec.ISIN.equals(assetMap.get(AssetType.ISIN))) return false;
+        }
+
+        if (sec.SEDOL != null && assetMap.containsKey(AssetType.SEDOL)) {
+            if (!sec.SEDOL.equals(assetMap.get(AssetType.SEDOL))) return false;
+        }
+
+        if (sec.CINS != null && assetMap.containsKey(AssetType.CINS)) {
+            if (!sec.CINS.equals(assetMap.get(AssetType.CINS))) return false;
+        }
+
+        return true;
+    }
+}
+
