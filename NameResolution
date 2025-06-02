@@ -28,42 +28,43 @@ interface EmployeeMatcher {
 
 public class EmployeeMapper {
 
-    public static BiMap<Long, String> buildBidirectionalMap(
-            Map<String, Long> nameToEmpID,
-            Map<Long, Emp> empMap,
-            List<EmployeeDTO> employeeDTOList,
-            EmployeeMatcher matcher) {
+    public static Map<Long, Emp> filterEmpMapByDTOs(
+        Map<Long, Emp> empMap,
+        Map<String, Long> nameToEmpID,
+        List<EmployeeDTO> employeeDTOList,
+        EmployeeMatcher matcher) {
 
-        // Map name to DTO for quick lookup
-        Map<String, EmployeeDTO> nameToDTO = employeeDTOList.stream()
-                .collect(Collectors.toMap(dto -> dto.name, dto -> dto));
+    // Map name to DTO for quick lookup
+    Map<String, EmployeeDTO> nameToDTO = employeeDTOList.stream()
+            .collect(Collectors.toMap(dto -> dto.name, dto -> dto));
 
-        // Group names by employee ID
-        Map<Long, Set<String>> empIdToNames = new HashMap<>();
-        for (Map.Entry<String, Long> entry : nameToEmpID.entrySet()) {
-            empIdToNames
-                .computeIfAbsent(entry.getValue(), k -> new HashSet<>())
-                .add(entry.getKey());
-        }
+    // Group names by employee ID
+    Map<Long, Set<String>> empIdToNames = new HashMap<>();
+    for (Map.Entry<String, Long> entry : nameToEmpID.entrySet()) {
+        empIdToNames
+            .computeIfAbsent(entry.getValue(), k -> new HashSet<>())
+            .add(entry.getKey());
+    }
 
-        // Create a BiMap for bidirectional lookup
-        BiMap<Long, String> biMap = HashBiMap.create();
+    // Filtered empMap to return
+    Map<Long, Emp> filteredEmpMap = new HashMap<>();
 
-        for (Map.Entry<Long, Set<String>> entry : empIdToNames.entrySet()) {
-            Long empId = entry.getKey();
-            Emp emp = empMap.get(empId);
+    for (Map.Entry<Long, Set<String>> entry : empIdToNames.entrySet()) {
+        Long empId = entry.getKey();
+        Emp emp = empMap.get(empId);
 
-            for (String name : entry.getValue()) {
-                EmployeeDTO dto = nameToDTO.get(name);
-                if (dto != null && matcher.matches(emp, dto)) {
-                    biMap.put(empId, name);
-                    break; // Stop after first match
-                }
+        for (String name : entry.getValue()) {
+            EmployeeDTO dto = nameToDTO.get(name);
+            if (dto != null && matcher.matches(emp, dto)) {
+                filteredEmpMap.put(empId, emp);
+                break; // Stop after first match
             }
         }
-
-        return biMap;
     }
+
+    return filteredEmpMap;
+}
+
 }
 ==============================
 public class DefaultEmployeeMatcher implements EmployeeMatcher {
